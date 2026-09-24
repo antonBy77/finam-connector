@@ -48,7 +48,22 @@ viz.candlestick("SBER@MISX", "H1", out="candles.png")
 viz.volume_profile_chart("SBER@MISX", out="vp.png")
 viz.wall_map(out="walls.png")
 viz.full_report("SBER@MISX", out="report.png")
+
+# Демо-дашборд 6-в-1: свечи D1/H1 + VP + лента дня + RSI + CVD
+# (см. examples/demo_dashboard.py)
 ```
+
+Пример дашборда собирается командой `python3 examples/demo_dashboard.py` —
+свечи с EMA и POC, volume profile, лента дня с buy/sell-принтами и CVD.
+
+## Проверено в бою (24.09.2026)
+
+- **Стриминг:** SBER весь день, тысячи тиков без пропусков, задержка p50 0.57с.
+  Полный дневной датасет: каждая сделка + стакан 2с в NDJSON.
+- **Edge стен подтверждён на живом полном стакане:** стены (≥3× соседей) держатся
+  82.7% через 60с против 76.2% обычных уровней — +6.5%, z=13.2.
+- **Бэктест rejection с мейкер-мейкером:** 221 сделка за день, +9.37 ₽/лот, win 89%
+  (детали и A/B с гейтом — в [moex-wall-trader](https://github.com/antonBy77/moex-wall-trader)).
 
 ## Состав
 
