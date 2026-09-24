@@ -183,10 +183,36 @@ class FinamConnector:
         return th
 
     def stream_orderbook(self, symbol: str, callback, reconnect: bool = True):
-        """Подписка на стакан: callback({"bids","asks"}) на каждый апдейт."""
+        """Подписка на стакан: callback({"bids","asks"}) на каждый апдейт.
+        Ответ ev.order_book — список групп, у каждой .rows (price/buy_size/sell_size)."""
         if not self._fp:
             raise RuntimeError("gRPC недоступен")
         from FinamPy.grpc.marketdata_service_pb2 import SubscribeOrderBookRequest
+
+        def _parse(ev):
+            f = lambda d: float(d.value) if getattr(d, "value", None) else 0.0
+            bids, asks = [], []
+            # схема A: ev.order_book = [группы с .rows]
+            groups = getattr(ev, "order_book", None)
+            if groups is not None and len(groups):
+                for g in groups:
+                    for row in getattr(g, "rows", []):
+                        p, b, s = f(row.price), f(row.buy_size), f(row.sell_size)
+                        if b > 0:
+                            bids.append((p, b))
+                        if s > 0:
+                            asks.append((p, s))
+            else:
+                # схема B: ev.orderbook.rows (unary-подобная)
+                for row in getattr(getattr(ev, "orderbook", None), "rows", []) or []:
+                    p, b, s = f(row.price), f(row.buy_size), f(row.sell_size)
+                    if b > 0:
+                        bids.append((p, b))
+                    if s > 0:
+                        asks.append((p, s))
+            bids.sort(key=lambda x: -x[0])
+            asks.sort(key=lambda x: x[0])
+            return {"symbol": symbol, "bids": bids, "asks": asks}
 
         def _run():
             while True:
@@ -195,17 +221,7 @@ class FinamConnector:
                         request=SubscribeOrderBookRequest(symbol=symbol),
                         metadata=(self._fp.metadata,))
                     for ev in stream:
-                        f = lambda d: float(d.value) if d.value else 0.0
-                        bids, asks = [], []
-                        for row in ev.orderbook.rows:
-                            p, b, s = f(row.price), f(row.buy_size), f(row.sell_size)
-                            if b > 0:
-                                bids.append((p, b))
-                            if s > 0:
-                                asks.append((p, s))
-                        bids.sort(key=lambda x: -x[0])
-                        asks.sort(key=lambda x: x[0])
-                        callback({"symbol": symbol, "bids": bids, "asks": asks})
+                        callback(_parse(ev))
                 except Exception as e:
                     print(f"[stream_ob {symbol}] {type(e).__name__}: {str(e)[:80]}; reconnect 3s")
                     if not reconnect:
